@@ -3,6 +3,9 @@ import numpy as np
 import os
 from .bbox import BoundBox, bbox_iou
 from scipy.special import expit
+import requests, json
+import tensorflow.keras.applications.mobilenet as mobilenet
+
 
 def _sigmoid(x):
     return expit(x)
@@ -166,7 +169,7 @@ def do_nms(boxes, nms_thresh):
                 if bbox_iou(boxes[index_i], boxes[index_j]) >= nms_thresh:
                     boxes[index_j].classes[c] = 0
 
-def decode_netout(netout, anchors, obj_thresh, net_h, net_w):
+def decode_netout(netout, anchors, obj_thresh, net_h, net_w, max_boxes=5):
     grid_h, grid_w = netout.shape[:2]
     nb_box = 3
     netout = netout.reshape((grid_h, grid_w, nb_box, -1))
@@ -189,7 +192,7 @@ def decode_netout(netout, anchors, obj_thresh, net_h, net_w):
             # 4th element is objectness score
             objectness = netout[row, col, b, 4]
             
-            if(objectness <= obj_thresh): continue
+            # if(objectness <= obj_thresh): continue
             
             # first 4 elements are x, y, w, and h
             x, y, w, h = netout[row,col,b,:4]
@@ -204,9 +207,16 @@ def decode_netout(netout, anchors, obj_thresh, net_h, net_w):
             
             box = BoundBox(x-w/2, y-h/2, x+w/2, y+h/2, objectness, classes)
 
-            boxes.append(box)
+            boxes.append({'objectness': objectness, 'box':box})
 
-    return boxes
+    boxes.sort(key=lambda x:x['objectness'], reverse=True)
+
+    sorted_boxes = []
+    for i in range(min(max_boxes, len(boxes))):
+        print(boxes[i]['objectness'])
+        sorted_boxes.append(boxes[i]['box'])
+
+    return sorted_boxes
 
 def preprocess_input(image, net_h, net_w):
     new_h, new_w, _ = image.shape
@@ -246,12 +256,16 @@ def get_yolo_boxes(model, images, net_h, net_w, anchors, obj_thresh, nms_thresh)
     batch_boxes  = [None]*nb_images
 
     for i in range(nb_images):
+        print(type(batch_output[0][i]))
+        print(batch_output[0][i].shape)
+
         yolos = [batch_output[0][i], batch_output[1][i], batch_output[2][i]]
         boxes = []
 
         # decode the output of the network
         for j in range(len(yolos)):
             yolo_anchors = anchors[(2-j)*6:(3-j)*6] # config['model']['anchors']
+            print(yolos[j].shape)
             boxes += decode_netout(yolos[j], yolo_anchors, obj_thresh, net_h, net_w)
 
         # correct the sizes of the bounding boxes
@@ -263,6 +277,49 @@ def get_yolo_boxes(model, images, net_h, net_w, anchors, obj_thresh, nms_thresh)
         batch_boxes[i] = boxes
 
     return batch_boxes        
+
+
+def get_yolo_box_tfs(tfs_url, image_data, net_h, net_w, anchors, obj_thresh, nms_thresh):
+    image_h, image_w, _ = image_data.shape
+    input = preprocess_input(image_data, net_h, net_w)
+
+    # preprocess the input
+    # run the prediction
+    # TODO: get output from tfs
+    input_data = np.expand_dims(image_data, axis=0)
+    input_data = mobilenet.preprocess_input(input_data)
+
+    input_data = {
+    'signature_name': 'predict',
+    'instances':input_data.tolist()
+    }
+    print(tfs_url)
+    response = requests.post(tfs_url, json=input_data)
+    response_data = json.loads(response.text)
+    output1 = response_data['predictions'][0]['output1']
+    output2 = response_data['predictions'][0]['output2']
+    output3 = response_data['predictions'][0]['output3']
+
+    outputs = [output1, output2, output3]
+    boxes = []
+
+    for i in range(len(outputs)):
+        yolo_output = np.array(outputs[i])
+        bboxes = decode_netout(yolo_output, anchors, obj_thresh, net_h, net_w)
+        boxes += bboxes
+
+    correct_yolo_boxes(boxes, image_h, image_w, net_h, net_w)
+    do_nms(boxes, nms_thresh)        
+       
+    return boxes
+
+    # yolos = np.array(output)
+
+    # # yolos = [np.array(output[0][0]), output[1][0], output[2][0]]
+
+    # boxes = decode_netout(yolos, anchors, obj_thresh, net_h, net_w)
+
+
 
 def compute_overlap(a, b):
     """

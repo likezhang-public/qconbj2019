@@ -37,5 +37,9 @@
         "cache_name":           "valid_cache.pkl",
 
         "valid_times":          1
+    },
+
+    "serving": {
+        "output_path": "./export/"
     }
 }
