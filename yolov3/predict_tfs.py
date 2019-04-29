@@ -13,7 +13,7 @@ with open('anchors.json') as anchors_str:
 
 
 net_h, net_w = 416, 416 # a multiple of 32, the smaller the faster
-obj_thresh, nms_thresh = 0.5, 0.45
+obj_thresh, nms_thresh = 0.4, 0.45
 
 TFS_URL="http://localhost:8501/v1/models/yolo3:predict"
 img_path = sys.argv[1]

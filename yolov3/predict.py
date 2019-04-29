@@ -28,7 +28,7 @@ def _main_(args):
     #   Set some parameter
     ###############################       
     net_h, net_w = 416, 416 # a multiple of 32, the smaller the faster
-    obj_thresh, nms_thresh = 0.5, 0.45
+    obj_thresh, nms_thresh = 0.4, 0.45
 
     image_paths = []
 
@@ -54,7 +54,7 @@ def _main_(args):
  
         # write the image with bounding boxes to file
         cv2.imwrite(output_path + image_path.split('/')[-1], np.uint8(image))  
-        break       
+        # break       
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser(description='Predict with a trained yolo model')

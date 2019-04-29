@@ -68,7 +68,7 @@ def create_training_instances(
 
     return train_ints, valid_ints, sorted(labels), max_box_per_image
 
-def get_current_learning_rate(epoch):
+def get_current_learning_rate(epoch, lr):
     # https://github.com/pjreddie/darknet/blob/tjluyao-master/src/network.c
     # if (batch_num < net.burn_in) return net.learning_rate * pow((float)batch_num / net.burn_in, net.power);
     global WARMUP_EPOCHS
@@ -76,7 +76,7 @@ def get_current_learning_rate(epoch):
 
     lrate = LEARNING_RATE
 
-    if epoch <= WARMUP_EPOCHS:
+    if WARMUP_EPOCHS > 0 and epoch <= WARMUP_EPOCHS:
         lrate = LEARNING_RATE * math.pow(epoch/WARMUP_EPOCHS, 4)
 
     return lrate
@@ -106,7 +106,21 @@ def create_callbacks(saved_weights_name, tensorboard_logs, model_to_save):
         write_images           = True,
     )    
 
+    reduce_on_plateau = ReduceLROnPlateau(
+        monitor  = 'loss',
+        factor   = 0.1,
+        patience = 2,
+        verbose  = 1,
+        mode     = 'min',
+        epsilon  = 0.01,
+        cooldown = 0,
+        min_lr   = 0
+    )
+
     lrate = LearningRateScheduler(get_current_learning_rate)
+
+    if WARMUP_EPOCHS <= 0:
+        return [early_stop, checkpoint, reduce_on_plateau, tensorboard]
 
     return [lrate, early_stop, checkpoint, tensorboard]
 
